@@ -1,19 +1,31 @@
-/**
- * Import function triggers from their respective submodules:
- *
- * const {onCall} = require("firebase-functions/v2/https");
- * const {onDocumentWritten} = require("firebase-functions/v2/firestore");
- *
- * See a full list of supported triggers at https://firebase.google.com/docs/functions
- */
+const functions = require("firebase-functions");
+const admin = require("firebase-admin");
 
-const {onRequest} = require("firebase-functions/v2/https");
-const logger = require("firebase-functions/logger");
+admin.initializeApp();
 
-// Create and deploy your first functions
-// https://firebase.google.com/docs/functions/get-started
+// Example HTTPS function to send a notification
+exports.sendNotification = functions.https.onRequest(async (req, res) => {
+  try {
+    // The notification payload
+    const payload = {
+      notification: {
+        title: req.body.title || "Default Title",
+        body: req.body.body || "Default Body",
+      },
+    };
 
-// exports.helloWorld = onRequest((request, response) => {
-//   logger.info("Hello logs!", {structuredData: true});
-//   response.send("Hello from Firebase!");
-// });
+    // Target device token or topic
+    const tokenOrTopic = req.body.token || req.body.topic;
+
+    if (!tokenOrTopic) {
+      res.status(400).send("Missing 'token' or 'topic' in request body");
+      return;
+    }
+
+    const response = await admin.messaging().sendToDevice(tokenOrTopic, payload);
+    res.status(200).send({message: "Notification sent successfully", response});
+  } catch (error) {
+    console.error("Error sending notification:", error);
+    res.status(500).send({error: "Failed to send notification", details: error});
+  }
+});
