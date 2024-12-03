@@ -22,10 +22,12 @@ exports.sendNotification = functions.https.onRequest(async (req, res) => {
       return;
     }
 
+    // eslint-disable-next-line max-len
     const response = await admin.messaging().sendToDevice(tokenOrTopic, payload);
     res.status(200).send({message: "Notification sent successfully", response});
   } catch (error) {
     console.error("Error sending notification:", error);
+    // eslint-disable-next-line max-len
     res.status(500).send({error: "Failed to send notification", details: error});
   }
 });
