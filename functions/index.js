@@ -6,24 +6,24 @@ admin.initializeApp();
 // Example HTTPS function to send a notification
 exports.sendNotification = functions.https.onRequest(async (req, res) => {
   try {
-    // The notification payload
-    const payload = {
+    // Target device token or topic
+    const {token, topic, title, body, data} = req.body;
+
+
+    // Construct the message payload
+    const message = {
       notification: {
-        title: req.body.title || "Default Title",
-        body: req.body.body || "Default Body",
+        title: title || "Default Title",
+        body: body || "Default Body",
       },
+      data: data || {}, // Custom key-value pairs
+      token: token, // Target a specific device
+      topic: topic, // Or target a topic
     };
 
-    // Target device token or topic
-    const tokenOrTopic = req.body.token || req.body.topic;
-
-    if (!tokenOrTopic) {
-      res.status(400).send("Missing 'token' or 'topic' in request body");
-      return;
-    }
-
+    // Send the message
+    const response = await admin.messaging().send(message);
     // eslint-disable-next-line max-len
-    const response = await admin.messaging().sendToDevice(tokenOrTopic, payload);
     res.status(200).send({message: "Notification sent successfully", response});
   } catch (error) {
     console.error("Error sending notification:", error);
