@@ -27,16 +27,16 @@ exports.sendNotification = functions.https.onRequest(async (req, res) => {
 
 // eslint-disable-next-line max-len
 exports.startTripNotification = onSchedule("*/30 * * * *", async (event) => {
-  console.log("Scheduled function executed at:", new Date().toISOString());
+  console.info("Scheduled function executed at:", new Date().toISOString());
   try {
     const db = admin.firestore();
-    const query = db.collection("trips")
+    const queryStartTrips = db.collection("trips")
         .where("status", "==", "booked")
         .where("date", "<=", new Date(new Date().getTime() + (30 * 60 * 1000)))
         // eslint-disable-next-line max-len
         .where("date", ">=", new Date(new Date().getTime() - (2 * 60 * 60 * 1000)));
 
-    const trips = await query.get();
+    const trips = await queryStartTrips.get();
 
     for (const trip of trips.docs) {
       try {
@@ -54,11 +54,11 @@ exports.startTripNotification = onSchedule("*/30 * * * *", async (event) => {
             "Tem um tour por iniciar!";
 
         let body = tourName +
-            "\n" + new Date().getTime() < tripDate.getTime() ?
+            "\n" + (new Date().getTime() < tripDate.getTime() ?
             "Prepare-se: você tem um tour às " + tripTime + "!" :
-            "Atenção: este tour já devia ter iniciado às " + tripTime + "!";
+            "Atenção: este tour já devia ter iniciado às " + tripTime + "!");
 
-        if (guide.exists()) {
+        if (guide.exists) {
           const documentData = guide.data();
           const hasField = "firebaseToken" in documentData;
           if (hasField) {
@@ -74,16 +74,57 @@ exports.startTripNotification = onSchedule("*/30 * * * *", async (event) => {
             "Tem um tour por iniciar!";
 
         body = tourName +
-            "\n" + new Date().getTime() < tripDate.getTime() ?
+            "\n" + (new Date().getTime() < tripDate.getTime() ?
             "Não perca: seu tour começa às " + tripTime + "!" :
-            "Urgente: seu tour deveria ter iniciado às " + tripTime + "!";
+            "Urgente: seu tour deveria ter iniciado às " + tripTime + "!");
 
-        if (client.exists()) {
+        if (client.exists) {
           const documentData = client.data();
           const hasField = "firebaseToken" in documentData;
           if (hasField) {
             // eslint-disable-next-line max-len
             const message = getMessage(title, body, null, client.get("firebaseToken"));
+            const response = await admin.messaging().send(message);
+            console.info("Notification sent successfully", response);
+          }
+        }
+      } catch (error) {
+        console.error("Error sending notification", trip, error);
+      }
+    }
+
+    const queryEndTrips = db.collection("trips")
+        .where("status", "==", "started")
+        // eslint-disable-next-line max-len
+        .where("date", ">=", new Date(new Date().getTime() + (2 * 60 * 60 * 1000)))
+        // eslint-disable-next-line max-len
+        .where("date", "<=", new Date(new Date().getTime() + (4 * 60 * 60 * 1000)));
+
+    const endTripsToProcess = await queryEndTrips.get();
+
+    for (const trip of endTripsToProcess.docs) {
+      try {
+        const tour = await trip.get("tourId").get();
+        const tourName = tour.get("name");
+        const tourDurationSlots= tour.get("durationSlots");
+        const guide = await trip.get("guideRef").get();
+        const tripFinishDate = new Date(trip.get("date").toDate().getTime() +
+            ((tourDurationSlots-1) * 60));
+
+        const tripTime = tripFinishDate.toLocaleTimeString("pt-PT",
+            {hour: "2-digit", minute: "2-digit"});
+
+        const title = "Tem um tour por finalizar!";
+
+        // eslint-disable-next-line max-len
+        const body = tourName + "\nAtenção: este tour já devia terminado às " + tripTime + "!";
+
+        if (guide.exists) {
+          const documentData = guide.data();
+          const hasField = "firebaseToken" in documentData;
+          if (hasField) {
+            // eslint-disable-next-line max-len
+            const message = getMessage(title, body, null, guide.get("firebaseToken"));
             const response = await admin.messaging().send(message);
             console.info("Notification sent successfully", response);
           }
@@ -187,7 +228,7 @@ exports.newTripNotification = onDocumentCreated("trips/{docId}",
 
 // eslint-disable-next-line require-jsdoc
 function getMessage(title, body, data, token) {
-  return {
+  const message = {
     notification: {
       title: title || "Default Title",
       body: body || "Default Body",
@@ -208,4 +249,6 @@ function getMessage(title, body, data, token) {
     token: token,
     topic: null,
   };
+  console.info(message);
+  return message;
 }
