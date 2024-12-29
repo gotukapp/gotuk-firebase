@@ -26,7 +26,7 @@ exports.sendNotification = functions.https.onRequest(async (req, res) => {
 });
 
 // eslint-disable-next-line max-len
-exports.startTripNotification = onSchedule("*/30 * * * *", async (event) => {
+exports.startTripNotification = onSchedule("*/30 7-22 * * *", async (event) => {
   console.info("Scheduled function executed at:", new Date().toISOString());
   try {
     const db = admin.firestore();
