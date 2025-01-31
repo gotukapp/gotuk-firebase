@@ -63,27 +63,27 @@ exports.startTripNotification = onSchedule("*/30 7-22 * * *", async (event) => {
           const hasField = "firebaseToken" in documentData;
           if (hasField) {
             // eslint-disable-next-line max-len
-            const message = getMessage(title, body, null, guide.get("firebaseToken"));
+            const message = getMessage(title, body, {"tripId": tour.id}, guide.get("firebaseToken"));
             const response = await admin.messaging().send(message);
             console.info("Notification sent successfully", response);
           }
         }
 
         title = new Date().getTime() < tripDate.getTime() ?
-            "Seu tour começa em breve!" :
+            "O seu tour começa em breve!" :
             "Tem um tour por iniciar!";
 
         body = tourName +
             "\n" + (new Date().getTime() < tripDate.getTime() ?
-            "Não perca: seu tour começa às " + tripTime + "!" :
-            "Urgente: seu tour deveria ter iniciado às " + tripTime + "!");
+            "Não perca: o seu tour começa às " + tripTime + "!" :
+            "Urgente: o seu tour deveria ter iniciado às " + tripTime + "!");
 
         if (client.exists) {
           const documentData = client.data();
           const hasField = "firebaseToken" in documentData;
           if (hasField) {
             // eslint-disable-next-line max-len
-            const message = getMessage(title, body, null, client.get("firebaseToken"));
+            const message = getMessage(title, body, {"tripId": tour.id}, client.get("firebaseToken"));
             const response = await admin.messaging().send(message);
             console.info("Notification sent successfully", response);
           }
@@ -124,7 +124,7 @@ exports.startTripNotification = onSchedule("*/30 7-22 * * *", async (event) => {
           const hasField = "firebaseToken" in documentData;
           if (hasField) {
             // eslint-disable-next-line max-len
-            const message = getMessage(title, body, null, guide.get("firebaseToken"));
+            const message = getMessage(title, body, {"tripId": tour.id}, guide.get("firebaseToken"));
             const response = await admin.messaging().send(message);
             console.info("Notification sent successfully", response);
           }
@@ -210,7 +210,7 @@ exports.newTripNotification = onDocumentCreated("trips/{docId}",
 
             const message = getMessage("Novo Go Now",
                 body,
-                null,
+                {"tripId": tour.id},
                 guide.get("firebaseToken"));
 
             // Send the message
