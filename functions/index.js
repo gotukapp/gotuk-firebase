@@ -276,6 +276,8 @@ async function createNotificationDocument(data, tripId, type) {
     await db.collection("notifications").add({
       type: type,
       tripId: tripId,
+      userId: data.get("to"),
+      status: "new",
       content: data.get("text"), // chatId is equals to tripId
       timestamp: admin.firestore.FieldValue.serverTimestamp(),
     });
