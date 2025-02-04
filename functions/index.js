@@ -146,85 +146,91 @@ exports.newTripNotification = onDocumentCreated("trips/{docId}",
         if (data.get("status") !== "pending") {
           return;
         }
-        const db = admin.firestore();
-        const tour = await data.get("tourId").get();
-        const tourName = tour.get("name");
-        const tripDate = await data.get("date").toDate();
-        const hourSliderValue = tripDate.getHours();
-        const minutesSliderValue = tripDate.getMinutes();
-        const guidesUnavailable = []; // List of unavailable guides
 
-        const formatter = new Intl.DateTimeFormat("pt-PT",
-            {year: "numeric", month: "2-digit", day: "2-digit"});
-        const formatedTripDate = formatter.format(tripDate);
-
-        const unavailabilityRef = await db.collection("unavailability")
-            .doc(formatedTripDate).get();
-        if (unavailabilityRef.exists) {
-          const durationSlots = tour.get("durationSlots");
-          for (let i = 0; i < durationSlots; i++) {
-            const totalMinutes =
-                (hourSliderValue * 60) + minutesSliderValue + (i * 30);
-            const newHour =
-                Math.floor(totalMinutes / 60); // Integer division for hours
-            const newMinutes = totalMinutes % 60; // Remainder for minutes
-
-            // eslint-disable-next-line max-len
-            const hour = `${newHour.toString().padStart(2, "0")}:${newMinutes.toString().padStart(2, "0")}`;
-
-            const fieldData = unavailabilityRef.get(hour);
-
-            if (Array.isArray(fieldData)) {
-              fieldData.forEach((guide) => {
-                if (!guidesUnavailable.includes(guide)) {
-                  guidesUnavailable.add(guide);
-                }
-              });
-            }
-          }
-        }
-
-        let guides = db.collection("users")
-            .where("accountValidated", "==", true);
-
-        if (data.get("onlyElectricVehicles")) {
-          guides = guides.where("tuktukElectric", "==", true);
-        }
-
-        if (data.get("guideLang").length !== 0) {
-          guides = guides.where("language", "array-contains-any",
-              data.get("guideLang").toLowerCase().split(" "));
-        }
-
-        guides.where("tuktukSeats", ">=", data.get("persons"));
-
-        const querySnapshot = await guides.get();
-
-        const filteredGuides = querySnapshot.docs.filter((doc) =>
-          !guidesUnavailable.includes(doc.id));
-
-        for (const guide of filteredGuides) {
-          try {
-            const body = tripDate.toLocaleString("pt-PT") + " - " + tourName +
-                "\nEntre na App para aceitar a viagem.";
-
-            const message = getMessage("Novo Go Now",
-                body,
-                {"tripId": tour.id},
-                guide.get("firebaseToken"));
-
-            // Send the message
-            const response = await admin.messaging().send(message);
-
-            console.info("Notification sent successfully", response);
-          } catch (error) {
-            console.error("Error sending notification:", error);
-          }
-        }
+        await sendNotification(data);
       } catch (error) {
         console.error("Error sending notification:", error);
       }
     });
+
+// eslint-disable-next-line require-jsdoc
+async function sendNotification(data) {
+  const db = admin.firestore();
+  const tour = await data.get("tourId").get();
+  const tripDate = data.get("date").toDate();
+  const tourName = tour.get("name");
+  const hourSliderValue = tripDate.getHours();
+  const minutesSliderValue = tripDate.getMinutes();
+  const guidesUnavailable = []; // List of unavailable guides
+
+  const formatter = new Intl.DateTimeFormat("pt-PT",
+      {year: "numeric", month: "2-digit", day: "2-digit"});
+  const formatedTripDate = formatter.format(tripDate);
+
+  const unavailabilityRef = await db.collection("unavailability")
+      .doc(formatedTripDate).get();
+  if (unavailabilityRef.exists) {
+    const durationSlots = tour.get("durationSlots");
+    for (let i = 0; i < durationSlots; i++) {
+      const totalMinutes =
+          (hourSliderValue * 60) + minutesSliderValue + (i * 30);
+      const newHour =
+          Math.floor(totalMinutes / 60); // Integer division for hours
+      const newMinutes = totalMinutes % 60; // Remainder for minutes
+
+      // eslint-disable-next-line max-len
+      const hour = `${newHour.toString().padStart(2, "0")}:${newMinutes.toString().padStart(2, "0")}`;
+
+      const fieldData = unavailabilityRef.get(hour);
+
+      if (Array.isArray(fieldData)) {
+        fieldData.forEach((guide) => {
+          if (!guidesUnavailable.includes(guide)) {
+            guidesUnavailable.add(guide);
+          }
+        });
+      }
+    }
+  }
+
+  let guides = db.collection("users")
+      .where("accountValidated", "==", true);
+
+  if (data.get("onlyElectricVehicles")) {
+    guides = guides.where("tuktukElectric", "==", true);
+  }
+
+  if (data.get("guideLang").length !== 0) {
+    guides = guides.where("language", "array-contains-any",
+        data.get("guideLang").toLowerCase().split(" "));
+  }
+
+  guides.where("tuktukSeats", ">=", data.get("persons"));
+
+  const querySnapshot = await guides.get();
+
+  const filteredGuides = querySnapshot.docs.filter((doc) =>
+    !guidesUnavailable.includes(doc.id));
+
+  for (const guide of filteredGuides) {
+    try {
+      const body = tripDate.toLocaleString("pt-PT") + " - " + tourName +
+          "\nEntre na App para aceitar a viagem.";
+
+      const message = getMessage("Novo Go Now",
+          body,
+          {"tripId": tour.id},
+          guide.get("firebaseToken"));
+
+      // Send the message
+      const response = await admin.messaging().send(message);
+
+      console.info("Notification sent successfully", response);
+    } catch (error) {
+      console.error("Error sending notification:", error);
+    }
+  }
+}
 
 // eslint-disable-next-line require-jsdoc
 function getMessage(title, body, data, token) {
@@ -251,4 +257,29 @@ function getMessage(title, body, data, token) {
   };
   console.info(message);
   return message;
+}
+
+// Function to handle new document in collection 'b'
+// eslint-disable-next-line max-len
+exports.onCreateChatMessage = onDocumentCreated("chat/{chatId}/messages/{messageId}",
+    async (event) => {
+      await createNotificationDocument(event.data,
+          event.params.chatId,
+          "message");
+    });
+
+// Function to create document in collection 'c'
+// eslint-disable-next-line require-jsdoc
+async function createNotificationDocument(data, tripId, type) {
+  try {
+    const db = admin.firestore();
+    await db.collection("notifications").add({
+      type: type,
+      tripId: tripId,
+      content: data.get("text"), // chatId is equals to tripId
+      timestamp: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  } catch (error) {
+    console.error("Error adding document to collection 'c'", error);
+  }
 }
