@@ -161,7 +161,7 @@ exports.newTripNotification = onDocumentCreated("trips/{docId}",
         if (event.data.get("status") === "booked") {
           const guideRef = event.data.get("guideRef");
           await createNotificationDocument(guideRef,
-              event.ref,
+              event.data.ref,
               "",
               "service booked");
         }
