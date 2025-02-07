@@ -163,7 +163,7 @@ exports.newTripNotification = onDocumentCreated("trips/{docId}",
           await createNotificationDocument(guideRef,
               event.data.ref,
               "",
-              "service booked");
+              "trip booked");
         }
       } catch (error) {
         console.error("Error sending notification:", error);
