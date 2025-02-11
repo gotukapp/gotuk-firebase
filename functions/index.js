@@ -124,15 +124,12 @@ async function sendGoNowNotification(guide, tripDate, tour) {
     const body = tripDate.toLocaleString("pt-PT") + " - " + tour.get("name") +
         "\nEntre na App para aceitar a viagem.";
 
-    const message = getMessage("Novo Go Now",
+    await sendFirebaseNotification("Novo Go Now",
         body,
         {"tripId": tour.id},
         guide.get("firebaseToken"));
 
-    // Send the message
-    const response = await admin.messaging().send(message);
-
-    console.info("Notification sent successfully", response);
+    console.info("Notification sent successfully");
   } catch (error) {
     console.error("Error sending notification:", error);
   }
