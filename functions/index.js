@@ -82,11 +82,11 @@ exports.newTripNotification = onDocumentCreated("trips/{docId}",
       try {
         if (event.data.get("status") === "pending") {
           const tour = await event.data.get("tourId").get();
-          const tripDate = event.data.get("date").toDate();
           const filteredGuides = await getAvailableGuides(event.data, tour);
 
           for (const guide of filteredGuides) {
-            await sendGoNowNotification(guide, tripDate, tour);
+            // eslint-disable-next-line max-len
+            await sendGoNowNotification(guide, event.params.docId, event.data, tour);
           }
         }
 
@@ -119,14 +119,16 @@ exports.onCreateChatMessage = onDocumentCreated("chat/{chatId}/messages/{message
     });
 
 // eslint-disable-next-line require-jsdoc
-async function sendGoNowNotification(guide, tripDate, tour) {
+async function sendGoNowNotification(guide, tripId, trip, tour) {
   try {
+    const tripDate = trip.get("date").toDate();
+
     const body = tripDate.toLocaleString("pt-PT") + " - " + tour.get("name") +
         "\nEntre na App para aceitar a viagem.";
 
     await sendFirebaseNotification("Novo Go Now",
         body,
-        {"tripId": tour.id},
+        {"tripId": tripId},
         guide.get("firebaseToken"));
 
     console.info("Notification sent successfully");
