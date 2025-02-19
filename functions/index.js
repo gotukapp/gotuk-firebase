@@ -6,8 +6,10 @@ const {
 const {onSchedule} = require("firebase-functions/v2/scheduler");
 const {sendGuideTripStartWarning,
   sendClientTripStartWarning, sendGuideTripEndWarning,
+  selectGuide, updateUserUnavailability,
 } = require("./tripUtil");
 const {sendFirebaseNotification} = require("./firebaseUtil");
+const {onDocumentUpdated} = require("firebase-functions/firestore");
 
 
 admin.initializeApp();
@@ -101,6 +103,48 @@ exports.newTripNotification = onDocumentCreated("trips/{docId}",
         console.error("Error sending notification:", error);
       }
     });
+
+// eslint-disable-next-line max-len
+exports.onTripUpdated = onDocumentUpdated("trips/{docId}", async (event) => {
+  const beforeData = event.data.before.data();
+  const afterData = event.data.after.data();
+  const db = admin.firestore();
+
+  // Check if 'status' field changed
+  if (beforeData.status !== afterData.status) {
+    // eslint-disable-next-line max-len
+    console.info(`Trip ${event.params.docId} status changed from ${beforeData.status} to ${afterData.status}`);
+    if (beforeData.status === "booked" && afterData.status === "rescheduling") {
+      const tour = await event.data.after.get("tourId").get();
+      const filteredGuides = await getAvailableGuides(event.data.after, tour);
+
+      const events = await db.collection("trips")
+          .doc(event.params.docId)
+          .collection("events")
+          .where("action", "==", "canceled").get();
+
+      const guideIdWithCancelEvent = [];
+      for (const event of events.docs) {
+        guideIdWithCancelEvent.push(event.get("createdBy"));
+      }
+
+      const guide = selectGuide(filteredGuides.filter((g) =>
+        !guideIdWithCancelEvent.includes(g.id)),
+      event.data.after.get("persons"));
+      if (guide != null) {
+        const db = admin.firestore();
+
+        await db.collection("trips").doc(event.params.docId).update({
+          guideRef: guide,
+          status: "booked",
+        });
+
+        const tripDate = event.data.after.get("date").toDate();
+        await updateUserUnavailability(guide.id, tour, tripDate);
+      }
+    }
+  }
+});
 
 // Function to handle new document in collection 'b'
 // eslint-disable-next-line max-len
