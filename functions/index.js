@@ -114,7 +114,7 @@ exports.onTripUpdated = onDocumentUpdated("trips/{docId}", async (event) => {
   if (beforeData.status !== afterData.status) {
     // eslint-disable-next-line max-len
     console.info(`Trip ${event.params.docId} status changed from ${beforeData.status} to ${afterData.status}`);
-    if (beforeData.status === "booked" && afterData.status === "rescheduling") {
+    if (beforeData.status === "booked" && afterData.status === "pending") {
       const tour = await event.data.after.get("tourId").get();
       const filteredGuides = await getAvailableGuides(event.data.after, tour);
 
