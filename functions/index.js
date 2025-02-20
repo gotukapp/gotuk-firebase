@@ -114,10 +114,10 @@ exports.onTripUpdated = onDocumentUpdated("trips/{docId}", async (event) => {
   if (beforeData.status !== afterData.status) {
     // eslint-disable-next-line max-len
     console.info(`Trip ${event.params.docId} status changed from ${beforeData.status} to ${afterData.status}`);
-    if (beforeData.status === "booked" && afterData.status === "pending") {
+    if (beforeData.status === "booked" && afterData.status === "rescheduling") {
       const tour = await event.data.after.get("tourId").get();
       const filteredGuides = await getAvailableGuides(event.data.after, tour);
-
+      console.info("Guides available:" + filteredGuides.length);
       const events = await db.collection("trips")
           .doc(event.params.docId)
           .collection("events")
@@ -127,7 +127,7 @@ exports.onTripUpdated = onDocumentUpdated("trips/{docId}", async (event) => {
       for (const event of events.docs) {
         guideIdWithCancelEvent.push(event.get("createdBy"));
       }
-
+      console.info("Guides with cancel event" + guideIdWithCancelEvent.length);
       const guide = selectGuide(filteredGuides.filter((g) =>
         !guideIdWithCancelEvent.includes(g.id)),
       event.data.after.get("persons"));
@@ -141,6 +141,8 @@ exports.onTripUpdated = onDocumentUpdated("trips/{docId}", async (event) => {
 
         const tripDate = event.data.after.get("date").toDate();
         await updateUserUnavailability(guide.id, tour, tripDate);
+      } else {
+        console.info("No guide available");
       }
     }
   }
