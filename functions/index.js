@@ -43,6 +43,7 @@ exports.startTripNotification = onSchedule("*/30 7-22 * * *",
             .where("date", ">=", new Date(new Date().getTime() -
                 (2 * 60 * 60 * 1000)));
 
+        console.info("Execute queryStartTrips");
         const trips = await queryStartTrips.get();
 
         for (const trip of trips.docs) {
@@ -62,6 +63,7 @@ exports.startTripNotification = onSchedule("*/30 7-22 * * *",
         // eslint-disable-next-line max-len
             .where("date", "<=", new Date(new Date().getTime() + (4 * 60 * 60 * 1000)));
 
+        console.info("Execute endTripsToProcess");
         const endTripsToProcess = await queryEndTrips.get();
 
         for (const trip of endTripsToProcess.docs) {
