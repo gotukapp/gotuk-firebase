@@ -6,7 +6,7 @@ const {
 const {onSchedule} = require("firebase-functions/v2/scheduler");
 const {sendGuideTripStartWarning,
   sendClientTripStartWarning, sendGuideTripEndWarning,
-  selectGuide, updateUserUnavailability,
+  selectGuide, updateUserUnavailability, sendClientTripCancelWarning,
 } = require("./tripUtil");
 const {sendFirebaseNotification} = require("./firebaseUtil");
 const {onDocumentUpdated} = require("firebase-functions/firestore");
@@ -27,6 +27,45 @@ exports.sendNotification = functions.https.onRequest(
         // eslint-disable-next-line max-len
         res.status(500).send({error: "Failed to send notification", details: error});
       }
+    });
+
+// eslint-disable-next-line max-len
+exports.checkPendingTrips = onSchedule("*/15 8-19 * * *",
+    async (event) => {
+      console.info("Scheduled function executed at:", new Date().toISOString());
+      try {
+        const db = admin.firestore();
+        const queryPendingTrips = db.collection("trips")
+            .where("status", "==", "pending")
+            // eslint-disable-next-line max-len
+            .where("date", "<=", new Date(new Date().getTime() +
+                (15 * 60 * 1000)));
+
+        console.info("Execute queryPendingTrips");
+        const pendingTripsToProcess = await queryPendingTrips.get();
+
+        for (const trip of pendingTripsToProcess.docs) {
+          try {
+            const tour = await trip.get("tourId").get();
+            const client = await trip.get("clientRef").get();
+            await db.collection("trips").doc(trip.id).update({
+              "status": "canceled",
+              "canceledDate": admin.firestore.FieldValue.serverTimestamp(),
+            });
+            await sendClientTripCancelWarning(client, trip, tour);
+            await createNotificationDocument(client,
+                trip.ref,
+                "",
+                "trip canceled");
+          } catch (error) {
+            console.error("Error sending notification", trip, error);
+          }
+        }
+      } catch (error) {
+        console.error("Error executing scheduled task:", error);
+      }
+
+      return null;
     });
 
 // eslint-disable-next-line max-len
@@ -70,29 +109,6 @@ exports.startTripNotification = onSchedule("*/30 7-22 * * *",
           try {
             const tour = await trip.get("tourId").get();
             await sendGuideTripEndWarning(trip, tour);
-          } catch (error) {
-            console.error("Error sending notification", trip, error);
-          }
-        }
-
-        const queryPendingTrips = db.collection("trips")
-            .where("status", "==", "pending")
-            // eslint-disable-next-line max-len
-            .where("date", "<=", new Date(new Date().getTime() +
-                (15 * 60 * 1000)));
-
-        console.info("Execute queryPendingTrips");
-        const pendingTripsToProcess = await queryPendingTrips.get();
-
-        for (const trip of pendingTripsToProcess.docs) {
-          try {
-            const tour = await trip.get("tourId").get();
-            const client = await trip.get("clientRef").get();
-            await createNotificationDocument(client,
-                trip.ref,
-                "",
-                "trip canceled");
-            await sendClientTripCancelWarning(client, trip, tour);
           } catch (error) {
             console.error("Error sending notification", trip, error);
           }
@@ -173,7 +189,6 @@ exports.onTripUpdated = onDocumentUpdated("trips/{docId}", async (event) => {
   }
 });
 
-// Function to handle new document in collection 'b'
 // eslint-disable-next-line max-len
 exports.onCreateChatMessage = onDocumentCreated("chat/{chatId}/messages/{messageId}",
     async (event) => {
@@ -266,7 +281,6 @@ async function getAvailableGuides(data, tour) {
     !guidesUnavailable.includes(doc.id));
 }
 
-// Function to create document in collection 'c'
 // eslint-disable-next-line require-jsdoc
 async function createNotificationDocument(userRef, tripRef, content, type) {
   try {
@@ -281,6 +295,6 @@ async function createNotificationDocument(userRef, tripRef, content, type) {
       timestamp: admin.firestore.FieldValue.serverTimestamp(),
     });
   } catch (error) {
-    console.error("Error adding document to collection 'c'", error);
+    console.error("Error adding document to collection 'notifications'", error);
   }
 }

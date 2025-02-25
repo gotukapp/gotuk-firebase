@@ -2,6 +2,29 @@ const {sendFirebaseNotification} = require("./firebaseUtil");
 const admin = require("firebase-admin");
 
 // eslint-disable-next-line require-jsdoc
+async function sendClientTripCancelWarning(client, trip, tour) {
+  const tourName = tour.get("name");
+  const tripDate = trip.get("date").toDate();
+  const tripTime = tripDate.toLocaleTimeString("pt-PT",
+      {hour: "2-digit", minute: "2-digit"});
+
+  const title = "O seu tour foi cancelado!";
+
+  const body = tourName +
+      // eslint-disable-next-line max-len
+      "\nNão foi possível encontrar um guia para a sua reserva das " + tripTime + "!";
+
+  if (client.exists) {
+    const documentData = client.data();
+    const hasField = "firebaseToken" in documentData;
+    if (hasField) {
+      // eslint-disable-next-line max-len
+      await sendFirebaseNotification(title, body, {"tripId": trip.id}, client.get("firebaseToken"));
+    }
+  }
+}
+
+// eslint-disable-next-line require-jsdoc
 async function sendClientTripStartWarning(trip, tour) {
   const tourName = tour.get("name");
   const client = await trip.get("clientRef").get();
@@ -203,6 +226,7 @@ async function updateUnavailabilityCollection(guideId, day, hour, status) {
 
 exports.sendGuideTripStartWarning = sendGuideTripStartWarning;
 exports.sendClientTripStartWarning = sendClientTripStartWarning;
+exports.sendClientTripCancelWarning = sendClientTripCancelWarning;
 exports.sendGuideTripEndWarning = sendGuideTripEndWarning;
 exports.selectGuide = selectGuide;
 exports.updateUserUnavailability = updateUserUnavailability;
