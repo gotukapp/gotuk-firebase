@@ -59,17 +59,40 @@ exports.startTripNotification = onSchedule("*/30 7-22 * * *",
         const queryEndTrips = db.collection("trips")
             .where("status", "==", "started")
         // eslint-disable-next-line max-len
-            .where("date", ">=", new Date(new Date().getTime() + (2 * 60 * 60 * 1000)))
+            .where("date", ">=", new Date(new Date().getTime() - (4 * 60 * 60 * 1000)))
         // eslint-disable-next-line max-len
-            .where("date", "<=", new Date(new Date().getTime() + (4 * 60 * 60 * 1000)));
+            .where("date", "<=", new Date(new Date().getTime() - (2 * 60 * 60 * 1000)));
 
-        console.info("Execute endTripsToProcess");
+        console.info("Execute queryEndTrips");
         const endTripsToProcess = await queryEndTrips.get();
 
         for (const trip of endTripsToProcess.docs) {
           try {
             const tour = await trip.get("tourId").get();
             await sendGuideTripEndWarning(trip, tour);
+          } catch (error) {
+            console.error("Error sending notification", trip, error);
+          }
+        }
+
+        const queryPendingTrips = db.collection("trips")
+            .where("status", "==", "pending")
+            // eslint-disable-next-line max-len
+            .where("date", "<=", new Date(new Date().getTime() +
+                (15 * 60 * 1000)));
+
+        console.info("Execute queryPendingTrips");
+        const pendingTripsToProcess = await queryPendingTrips.get();
+
+        for (const trip of pendingTripsToProcess.docs) {
+          try {
+            const tour = await trip.get("tourId").get();
+            const client = await trip.get("clientRef").get();
+            await createNotificationDocument(client,
+                trip.ref,
+                "",
+                "trip canceled");
+            await sendClientTripCancelWarning(client, trip, tour);
           } catch (error) {
             console.error("Error sending notification", trip, error);
           }
