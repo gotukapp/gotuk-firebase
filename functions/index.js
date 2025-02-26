@@ -7,6 +7,7 @@ const {onSchedule} = require("firebase-functions/v2/scheduler");
 const {sendGuideTripStartWarning,
   sendClientTripStartWarning, sendGuideTripEndWarning,
   selectGuide, updateUserUnavailability, sendClientTripCancelWarning,
+  sendGuideTripCancelWarning,
 } = require("./tripUtil");
 const {sendFirebaseNotification} = require("./firebaseUtil");
 const {onDocumentUpdated} = require("firebase-functions/firestore");
@@ -46,17 +47,17 @@ exports.checkPendingTrips = onSchedule("*/15 8-19 * * *",
 
         for (const trip of pendingTripsToProcess.docs) {
           try {
-            const tour = await trip.get("tourId").get();
-            const client = await trip.get("clientRef").get();
             await db.collection("trips").doc(trip.id).update({
               "status": "canceled",
               "canceledDate": admin.firestore.FieldValue.serverTimestamp(),
             });
-            await sendClientTripCancelWarning(client, trip, tour);
-            await createNotificationDocument(client,
-                trip.ref,
-                "",
-                "trip canceled");
+            await db.collection("trips").doc(trip.id).collection("events").add({
+              "action": "canceled",
+              "createdBy": "checkPendingTrips",
+              "notes": "",
+              "reason": "guideUnavailable",
+              "creationDate": admin.firestore.FieldValue.serverTimestamp(),
+            });
           } catch (error) {
             console.error("Error sending notification", trip, error);
           }
@@ -185,6 +186,34 @@ exports.onTripUpdated = onDocumentUpdated("trips/{docId}", async (event) => {
       } else {
         console.info("No guide available");
       }
+    } else if (beforeData.status === "pending" &&
+        afterData.status === "canceled") {
+      const tour = await event.data.after.get("tourId").get();
+      const clientRef = event.data.after.get("clientRef");
+
+      // eslint-disable-next-line max-len
+      await sendClientTripCancelWarning(event.data.after, tour, beforeData.status);
+      await createNotificationDocument(clientRef,
+          event.data.after.ref,
+          "",
+          "trip canceled");
+    } else if (beforeData.status === "booked" &&
+        afterData.status === "canceled") {
+      const tour = await event.data.after.get("tourId").get();
+
+      await sendGuideTripCancelWarning(event.data.after, tour);
+      await createNotificationDocument(event.data.after.get("guideRef"),
+          event.data.after.ref,
+          "",
+          "trip canceled");
+
+
+      // eslint-disable-next-line max-len
+      await sendClientTripCancelWarning(event.data.after, tour, beforeData.status);
+      await createNotificationDocument(event.data.after.get("clientRef"),
+          event.data.after.ref,
+          "",
+          "trip canceled");
     }
   }
 });
