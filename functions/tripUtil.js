@@ -29,6 +29,82 @@ async function sendClientTripCancelWarning(trip, tour, previousStatus) {
 }
 
 // eslint-disable-next-line require-jsdoc
+async function sendClientTripStartWarning(trip, tour) {
+  const tourName = tour.get("name");
+  const client = await trip.get("clientRef").get();
+  const tripDate = trip.get("date").toDate();
+  const tripTime = tripDate.toLocaleTimeString("pt-PT",
+      {hour: "2-digit", minute: "2-digit"});
+
+  const title = new Date().getTime() < tripDate.getTime() ?
+      "O seu tour começa em breve!" :
+      "Tem um tour por iniciar!";
+
+  const body = tourName +
+      "\n" + (new Date().getTime() < tripDate.getTime() ?
+          "Não perca: o seu tour começa às " + tripTime + "!" :
+          "Urgente: o seu tour deveria ter iniciado às " + tripTime + "!");
+
+  if (client.exists) {
+    const documentData = client.data();
+    const hasField = "firebaseToken" in documentData;
+    if (hasField) {
+      // eslint-disable-next-line max-len
+      await sendFirebaseNotification(title, body, {"tripId": trip.id}, client.get("firebaseToken"));
+    }
+  }
+}
+
+// eslint-disable-next-line require-jsdoc
+async function sendClientTripStarted(trip, tour) {
+  const tourName = tour.get("name");
+  const reservationId = tour.get("reservationId");
+  const client = await trip.get("clientRef").get();
+  const tripDate = trip.get("date").toDate();
+  const tripTime = tripDate.toLocaleTimeString("pt-PT",
+      {hour: "2-digit", minute: "2-digit"});
+
+  const title = "Tour iniciado!";
+
+  const body = tourName +
+      "\nO Tour " + reservationId + " das " + tripTime + " foi iniciado!";
+
+
+  if (client.exists) {
+    const documentData = client.data();
+    const hasField = "firebaseToken" in documentData;
+    if (hasField) {
+      // eslint-disable-next-line max-len
+      await sendFirebaseNotification(title, body, {"tripId": trip.id}, client.get("firebaseToken"));
+    }
+  }
+}
+
+// eslint-disable-next-line require-jsdoc
+async function sendClientTripAcceptedWarning(trip, tour) {
+  const tourName = tour.get("name");
+  const reservationId = tour.get("reservationId");
+  const client = await trip.get("clientRef").get();
+  const tripDate = trip.get("date").toDate();
+  const tripTime = tripDate.toLocaleTimeString("pt-PT",
+      {hour: "2-digit", minute: "2-digit"});
+
+  const title = "Tour Confirmado!";
+
+  const body = tourName +
+      "\nO Tour " + reservationId + " das " + tripTime + " está confirmado!";
+
+  if (client.exists) {
+    const documentData = client.data();
+    const hasField = "firebaseToken" in documentData;
+    if (hasField) {
+      // eslint-disable-next-line max-len
+      await sendFirebaseNotification(title, body, {"tripId": trip.id}, client.get("firebaseToken"));
+    }
+  }
+}
+
+// eslint-disable-next-line require-jsdoc
 async function sendGuideTripCancelWarning(trip, tour) {
   const tourName = tour.get("name");
   const guide = await trip.get("guideRef").get();
@@ -48,33 +124,6 @@ async function sendGuideTripCancelWarning(trip, tour) {
     if (hasField) {
       // eslint-disable-next-line max-len
       await sendFirebaseNotification(title, body, {"tripId": trip.id}, guide.get("firebaseToken"));
-    }
-  }
-}
-
-// eslint-disable-next-line require-jsdoc
-async function sendClientTripStartWarning(trip, tour) {
-  const tourName = tour.get("name");
-  const client = await trip.get("clientRef").get();
-  const tripDate = trip.get("date").toDate();
-  const tripTime = tripDate.toLocaleTimeString("pt-PT",
-      {hour: "2-digit", minute: "2-digit"});
-
-  const title = new Date().getTime() < tripDate.getTime() ?
-        "O seu tour começa em breve!" :
-        "Tem um tour por iniciar!";
-
-  const body = tourName +
-        "\n" + (new Date().getTime() < tripDate.getTime() ?
-            "Não perca: o seu tour começa às " + tripTime + "!" :
-            "Urgente: o seu tour deveria ter iniciado às " + tripTime + "!");
-
-  if (client.exists) {
-    const documentData = client.data();
-    const hasField = "firebaseToken" in documentData;
-    if (hasField) {
-      // eslint-disable-next-line max-len
-      await sendFirebaseNotification(title, body, {"tripId": trip.id}, client.get("firebaseToken"));
     }
   }
 }
@@ -255,6 +304,8 @@ async function updateUnavailabilityCollection(guideId, day, hour, status) {
 exports.sendGuideTripStartWarning = sendGuideTripStartWarning;
 exports.sendClientTripStartWarning = sendClientTripStartWarning;
 exports.sendClientTripCancelWarning = sendClientTripCancelWarning;
+exports.sendClientTripAcceptedWarning = sendClientTripAcceptedWarning;
+exports.sendClientTripStarted = sendClientTripStarted;
 exports.sendGuideTripCancelWarning = sendGuideTripCancelWarning;
 exports.sendGuideTripEndWarning = sendGuideTripEndWarning;
 exports.selectGuide = selectGuide;

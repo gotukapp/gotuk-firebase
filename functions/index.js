@@ -7,7 +7,8 @@ const {onSchedule} = require("firebase-functions/v2/scheduler");
 const {sendGuideTripStartWarning,
   sendClientTripStartWarning, sendGuideTripEndWarning,
   selectGuide, updateUserUnavailability, sendClientTripCancelWarning,
-  sendGuideTripCancelWarning,
+  sendGuideTripCancelWarning, sendClientTripAcceptedWarning,
+  sendClientTripStarted,
 } = require("./tripUtil");
 const {sendFirebaseNotification} = require("./firebaseUtil");
 const {onDocumentUpdated} = require("firebase-functions/firestore");
@@ -124,8 +125,8 @@ exports.startTripNotification = onSchedule("*/30 7-22 * * *",
 exports.newTripNotification = onDocumentCreated("trips/{docId}",
     async (event) => {
       try {
+        const tour = await event.data.get("tourId").get();
         if (event.data.get("status") === "pending") {
-          const tour = await event.data.get("tourId").get();
           const filteredGuides = await getAvailableGuides(event.data, tour);
 
           for (const guide of filteredGuides) {
@@ -136,6 +137,15 @@ exports.newTripNotification = onDocumentCreated("trips/{docId}",
 
         if (event.data.get("status") === "booked") {
           const guideRef = event.data.get("guideRef");
+          const guide = await guideRef.get();
+
+          if (guide.get("firebaseToken") != null) {
+            const tripDate = event.data.get("date").toDate();
+            await sendFirebaseNotification("New Tour",
+                tripDate.toLocaleString("pt-PT") + " - " + tour.get("name"),
+                {"tripId": event.params.docId},
+                guide.get("firebaseToken"));
+          }
           await createNotificationDocument(guideRef,
               event.data.ref,
               "",
@@ -154,10 +164,11 @@ exports.onTripUpdated = onDocumentUpdated("trips/{docId}", async (event) => {
 
   // Check if 'status' field changed
   if (beforeData.status !== afterData.status) {
+    const tour = await event.data.after.get("tourId").get();
+
     // eslint-disable-next-line max-len
     console.info(`Trip ${event.params.docId} status changed from ${beforeData.status} to ${afterData.status}`);
     if (beforeData.status === "booked" && afterData.status === "rescheduling") {
-      const tour = await event.data.after.get("tourId").get();
       const filteredGuides = await getAvailableGuides(event.data.after, tour);
       console.info("Guides available:" + filteredGuides.length);
       const events = await db.collection("trips")
@@ -188,7 +199,6 @@ exports.onTripUpdated = onDocumentUpdated("trips/{docId}", async (event) => {
       }
     } else if (beforeData.status === "pending" &&
         afterData.status === "canceled") {
-      const tour = await event.data.after.get("tourId").get();
       const clientRef = event.data.after.get("clientRef");
 
       // eslint-disable-next-line max-len
@@ -199,8 +209,6 @@ exports.onTripUpdated = onDocumentUpdated("trips/{docId}", async (event) => {
           "trip canceled");
     } else if (beforeData.status === "booked" &&
         afterData.status === "canceled") {
-      const tour = await event.data.after.get("tourId").get();
-
       await sendGuideTripCancelWarning(event.data.after, tour);
       await createNotificationDocument(event.data.after.get("guideRef"),
           event.data.after.ref,
@@ -214,6 +222,30 @@ exports.onTripUpdated = onDocumentUpdated("trips/{docId}", async (event) => {
           event.data.after.ref,
           "",
           "trip canceled");
+    } else if (beforeData.status === "pending" &&
+        afterData.status === "booked") {
+      // eslint-disable-next-line max-len
+      await sendClientTripAcceptedWarning(event.data.after, tour);
+      await createNotificationDocument(event.data.after.get("clientRef"),
+          event.data.after.ref,
+          "",
+          "trip accepted");
+    } else if (beforeData.status === "booked" &&
+        afterData.status === "started") {
+      // eslint-disable-next-line max-len
+      await sendClientTripStarted(event.data.after, tour);
+      await createNotificationDocument(event.data.after.get("clientRef"),
+          event.data.after.ref,
+          "",
+          "trip started");
+    } else if (beforeData.status === "started" &&
+        afterData.status === "finished") {
+      // eslint-disable-next-line max-len
+      await sendClientTripStarted(event.data.after, tour);
+      await createNotificationDocument(event.data.after.get("clientRef"),
+          event.data.after.ref,
+          "",
+          "trip started");
     }
   }
 });
@@ -223,11 +255,22 @@ exports.onCreateChatMessage = onDocumentCreated("chat/{chatId}/messages/{message
     async (event) => {
       const db = admin.firestore();
 
-      const userRef = db.collection("users").doc(event.data.get("to"));
+      const toRef = db.collection("users").doc(event.data.get("to"));
+      const fromRef = db.collection("users").doc(event.data.get("from"));
       const tripRef = db.collection("trips").doc(event.params.chatId);
 
+      const to = await toRef.get();
+      const from = await fromRef.get();
+
+      if (to.get("firebaseToken") != null) {
+        await sendFirebaseNotification(from.get("name"),
+            event.data.get("text"),
+            {"tripId": event.params.chatId, "type": "message"},
+            to.get("firebaseToken"));
+      }
+
       await createNotificationDocument(
-          userRef,
+          toRef,
           tripRef,
           event.data.get("text"),
           "message");
