@@ -10,28 +10,39 @@ const {sendGuideTripStartWarning,
   sendGuideTripCancelWarning, sendClientTripAcceptedWarning,
   sendClientTripStarted,
 } = require("./tripUtil");
-const {defineString} = require("firebase-functions/params");
+const {defineSecret} = require("firebase-functions/params");
 const {sendFirebaseNotification} = require("./firebaseUtil");
 const {onDocumentUpdated} = require("firebase-functions/firestore");
-// eslint-disable-next-line max-len
-const {webhooks, paymentIntents} = require("stripe")(defineString("STRIPE_SK_LIVE"));
-
+const stripeLib = require("stripe");
+const STRIPE_SK_LIVE = defineSecret("STRIPE_SK_LIVE");
+const STRIPE_SK_TEST = defineSecret("STRIPE_SK_TEST");
+const ENDPOINT_SECRET = defineSecret("ENDPOINT_SECRET");
+const TEST_ENDPOINT_SECRET = defineSecret("TEST_ENDPOINT_SECRET");
 
 admin.initializeApp();
 
+// eslint-disable-next-line require-jsdoc
+async function processPaymentEvent(event) {
+  switch (event.type) {
+    case "payment_intent.succeeded":
+      console.info(event.data.object);
+      await savePaymentData(event.data.object);
+      break;
+    default:
+      console.error(`Unhandled event type ${event.type}`);
+  }
+}
+
 exports.newTestPaymentReceived = functions.https.onRequest(
-    async (req, res) => {
-
-    });
-
-exports.newPaymentReceived = functions.https.onRequest(
+    {secrets: ["TEST_ENDPOINT_SECRET", "STRIPE_SK_TEST"]},
     async (req, res) => {
       try {
-        const endpointSecret = defineString("ENDPOINT_SECRET");
         const sig = req.headers["stripe-signature"];
         let event;
         try {
-          event = webhooks.constructEvent(req.rawBody, sig, endpointSecret);
+          const stripe = stripeLib(STRIPE_SK_TEST.value());
+          // eslint-disable-next-line max-len
+          event = stripe.webhooks.constructEvent(req.rawBody, sig, TEST_ENDPOINT_SECRET.value());
           console.info("event", event);
         } catch (err) {
           console.error("Webhook Error", err);
@@ -39,13 +50,34 @@ exports.newPaymentReceived = functions.https.onRequest(
           return;
         }
 
-        switch (event.type) {
-          case "payment_intent.succeeded":
-            console.info(event.data.object);
-            break;
-          default:
-            console.error(`Unhandled event type ${event.type}`);
+        await processPaymentEvent(event);
+
+        res.status(200).send();
+      } catch (error) {
+        console.error("Error processing new payment", error);
+        // eslint-disable-next-line max-len
+        res.status(500).send({error: "Error processing new payment", details: error});
+      }
+    });
+
+exports.newPaymentReceived = functions.https.onRequest(
+    {secrets: ["ENDPOINT_SECRET", "STRIPE_SK_LIVE"]},
+    async (req, res) => {
+      try {
+        const sig = req.headers["stripe-signature"];
+        let event;
+        try {
+          const stripe = stripeLib(STRIPE_SK_LIVE.value());
+          // eslint-disable-next-line max-len
+          event = stripe.webhooks.constructEvent(req.rawBody, sig, ENDPOINT_SECRET.value());
+          console.info("event", event);
+        } catch (err) {
+          console.error("Webhook Error", err);
+          res.status(400).send(`Webhook Error: ${err.message}`);
+          return;
         }
+
+        await processPaymentEvent(event);
 
         res.status(200).send();
       } catch (error) {
@@ -71,10 +103,12 @@ exports.sendNotification = functions.https.onRequest(
     });
 
 exports.createStripePayment = functions.https.onRequest(
+    {secrets: ["STRIPE_SK_LIVE"]},
     async (req, res) => {
       try {
         const {amount, currency} = req.body;
-        const paymentIntent = await paymentIntents.create({
+        const stripe = stripeLib(STRIPE_SK_LIVE.value());
+        const paymentIntent = await stripe.paymentIntents.create({
           amount: amount,
           currency: currency,
           payment_method_types: ["card"],
@@ -89,10 +123,12 @@ exports.createStripePayment = functions.https.onRequest(
     });
 
 exports.createTestStripePayment = functions.https.onRequest(
+    {secrets: ["STRIPE_SK_TEST"]},
     async (req, res) => {
       try {
         const {amount, currency} = req.body;
-        const stripe = require("stripe")(defineString("STRIPE_SK_TEST"));
+        const stripe = stripeLib(STRIPE_SK_TEST.value());
+
         const paymentIntent = await stripe.paymentIntents.create({
           amount: amount,
           currency: currency,
@@ -465,4 +501,13 @@ async function createNotificationDocument(userRef, tripRef, content, type) {
   } catch (error) {
     console.error("Error adding document to collection 'notifications'", error);
   }
+}
+
+// eslint-disable-next-line require-jsdoc
+async function savePaymentData(payment) {
+  const db = admin.firestore();
+
+  await db.collection("payments").doc(payment.id).set({
+    data: payment,
+  });
 }
