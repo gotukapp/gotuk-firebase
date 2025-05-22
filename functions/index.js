@@ -10,11 +10,50 @@ const {sendGuideTripStartWarning,
   sendGuideTripCancelWarning, sendClientTripAcceptedWarning,
   sendClientTripStarted,
 } = require("./tripUtil");
+const {defineString} = require("firebase-functions/params");
 const {sendFirebaseNotification} = require("./firebaseUtil");
 const {onDocumentUpdated} = require("firebase-functions/firestore");
+// eslint-disable-next-line max-len
+const {webhooks, paymentIntents} = require("stripe")(defineString("STRIPE_SK_LIVE"));
 
 
 admin.initializeApp();
+
+exports.newTestPaymentReceived = functions.https.onRequest(
+    async (req, res) => {
+
+    });
+
+exports.newPaymentReceived = functions.https.onRequest(
+    async (req, res) => {
+      try {
+        const endpointSecret = defineString("ENDPOINT_SECRET");
+        const sig = req.headers["stripe-signature"];
+        let event;
+        try {
+          event = webhooks.constructEvent(req.rawBody, sig, endpointSecret);
+          console.info("event", event);
+        } catch (err) {
+          console.error("Webhook Error", err);
+          res.status(400).send(`Webhook Error: ${err.message}`);
+          return;
+        }
+
+        switch (event.type) {
+          case "payment_intent.succeeded":
+            console.info(event.data.object);
+            break;
+          default:
+            console.error(`Unhandled event type ${event.type}`);
+        }
+
+        res.status(200).send();
+      } catch (error) {
+        console.error("Error processing new payment", error);
+        // eslint-disable-next-line max-len
+        res.status(500).send({error: "Error processing new payment", details: error});
+      }
+    });
 
 // Example HTTPS function to send a notification
 exports.sendNotification = functions.https.onRequest(
@@ -28,6 +67,43 @@ exports.sendNotification = functions.https.onRequest(
         console.error("Error sending notification:", error);
         // eslint-disable-next-line max-len
         res.status(500).send({error: "Failed to send notification", details: error});
+      }
+    });
+
+exports.createStripePayment = functions.https.onRequest(
+    async (req, res) => {
+      try {
+        const {amount, currency} = req.body;
+        const paymentIntent = await paymentIntents.create({
+          amount: amount,
+          currency: currency,
+          payment_method_types: ["card"],
+        });
+
+        res.send(paymentIntent.client_secret);
+      } catch (error) {
+        console.error("Error creating stripe payment:", error);
+        // eslint-disable-next-line max-len
+        res.status(500).send({error: "Failed to create stripe payment", details: error});
+      }
+    });
+
+exports.createTestStripePayment = functions.https.onRequest(
+    async (req, res) => {
+      try {
+        const {amount, currency} = req.body;
+        const stripe = require("stripe")(defineString("STRIPE_SK_TEST"));
+        const paymentIntent = await stripe.paymentIntents.create({
+          amount: amount,
+          currency: currency,
+          payment_method_types: ["card"],
+        });
+
+        res.send(paymentIntent.client_secret);
+      } catch (error) {
+        console.error("Error creating stripe payment:", error);
+        // eslint-disable-next-line max-len
+        res.status(500).send({error: "Failed to create stripe payment", details: error});
       }
     });
 
@@ -122,6 +198,27 @@ exports.startTripNotification = onSchedule("*/30 7-22 * * *",
       return null;
     });
 
+exports.checkGuideAssociatedTuk = onSchedule("0 1 * * *",
+    async (event) => {
+      try {
+        const db = admin.firestore();
+        const queryGuides = db.collection("users")
+            .where("guideMode", "==", true)
+            .where("accountValidated", "==", true)
+            .where("accountAccepted", "==", true)
+            .where("disabled", "==", false);
+
+        const guidesToProcess = await queryGuides.get();
+
+        for (const guide of guidesToProcess.docs) {
+          await db.collection("users").doc(guide.id).update({
+            needSelectTukTuk: true});
+        }
+      } catch (error) {
+        console.error("Error executing scheduled task:", error);
+      }
+    });
+
 exports.newTripNotification = onDocumentCreated("trips/{docId}",
     async (event) => {
       try {
@@ -162,7 +259,6 @@ exports.onTripUpdated = onDocumentUpdated("trips/{docId}", async (event) => {
   const afterData = event.data.after.data();
   const db = admin.firestore();
 
-  // Check if 'status' field changed
   if (beforeData.status !== afterData.status) {
     const tour = await event.data.after.get("tourId").get();
 

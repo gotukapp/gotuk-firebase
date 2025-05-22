@@ -1,24 +1,54 @@
 const {sendFirebaseNotification} = require("./firebaseUtil");
 const admin = require("firebase-admin");
+const i18next = require("i18next");
+const Backend = require("i18next-fs-backend");
+const path = require("path");
 
 // eslint-disable-next-line require-jsdoc
+function convertFromUTC(tripDate) {
+  return tripDate.toLocaleTimeString("pt-PT", {
+    timeZone: "Europe/Lisbon",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+const i18nReady = i18next.use(Backend).init({
+  backend: {
+    loadPath: path.join(__dirname, "/locales/{{lng}}/translations.json"),
+  },
+  fallbackLng: "en",
+  preload: ["en", "pt"],
+  initImmediate: false,
+});
+
+// eslint-disable-next-line require-jsdoc
+function getTranslations(client) {
+  const lang = client.get("appLanguage") || "en";
+  return i18next.getFixedT(lang);
+}
+
+// eslint-disable-next-line require-jsdoc,max-len
 async function sendClientTripCancelWarning(trip, tour, previousStatus) {
   const tourName = tour.get("name");
   const client = await trip.get("clientRef").get();
   const tripDate = trip.get("date").toDate();
-  const tripTime = tripDate.toLocaleTimeString("pt-PT",
-      {hour: "2-digit", minute: "2-digit"});
-
-  const title = "Tour cancelado!";
-
-  const body = previousStatus === "pending" ? tourName +
-      // eslint-disable-next-line max-len
-      "\nNão foi possível encontrar um guia para a sua reserva das " + tripTime + "!" :
-      tourName +
-      // eslint-disable-next-line max-len
-      "\nA sua reserva "+ await trip.get("reservationId") + " das " + tripTime + " foi cancelada!";
+  const tripTime = convertFromUTC(tripDate);
+  const reservationId = await trip.get("reservationId");
 
   if (client.exists) {
+    await i18nReady;
+    const translations = getTranslations(client);
+
+    const title = translations("tourCanceledTitle");
+
+    const body = previousStatus === "pending" ?
+        translations("tourCanceledNoGuideClientWarning",
+            {tourName, reservationId, tripTime}) :
+        translations("tourCanceledClientWarning",
+            {tourName, reservationId, tripTime});
+
+
     const documentData = client.data();
     const hasField = "firebaseToken" in documentData;
     if (hasField) {
@@ -33,19 +63,22 @@ async function sendClientTripStartWarning(trip, tour) {
   const tourName = tour.get("name");
   const client = await trip.get("clientRef").get();
   const tripDate = trip.get("date").toDate();
-  const tripTime = tripDate.toLocaleTimeString("pt-PT",
-      {hour: "2-digit", minute: "2-digit"});
-
-  const title = new Date().getTime() < tripDate.getTime() ?
-      "O seu tour começa em breve!" :
-      "Tem um tour por iniciar!";
-
-  const body = tourName +
-      "\n" + (new Date().getTime() < tripDate.getTime() ?
-          "Não perca: o seu tour começa às " + tripTime + "!" :
-          "Urgente: o seu tour deveria ter iniciado às " + tripTime + "!");
+  const tripTime = convertFromUTC(tripDate);
 
   if (client.exists) {
+    await i18nReady;
+    const translations = getTranslations(client);
+
+    const title = new Date().getTime() < tripDate.getTime() ?
+        translations("tourStartSoonTitle") :
+        translations("tourStartTitle");
+
+    const body = new Date().getTime() < tripDate.getTime() ?
+        translations("tourStartSoonClientWarning",
+            {tourName, tripTime}) :
+        translations("tourStartClientWarning",
+            {tourName, tripTime});
+
     const documentData = client.data();
     const hasField = "firebaseToken" in documentData;
     if (hasField) {
@@ -61,16 +94,17 @@ async function sendClientTripStarted(trip, tour) {
   const reservationId = tour.get("reservationId");
   const client = await trip.get("clientRef").get();
   const tripDate = trip.get("date").toDate();
-  const tripTime = tripDate.toLocaleTimeString("pt-PT",
-      {hour: "2-digit", minute: "2-digit"});
-
-  const title = "Tour iniciado!";
-
-  const body = tourName +
-      "\nO Tour " + reservationId + " das " + tripTime + " foi iniciado!";
-
+  const tripTime = convertFromUTC(tripDate);
 
   if (client.exists) {
+    await i18nReady;
+    const translations = getTranslations(client);
+
+    const title = translations("tourStarted");
+
+    const body = translations("tourStartedWarning",
+        {tourName, reservationId, tripTime});
+
     const documentData = client.data();
     const hasField = "firebaseToken" in documentData;
     if (hasField) {
@@ -86,15 +120,17 @@ async function sendClientTripAcceptedWarning(trip, tour) {
   const reservationId = tour.get("reservationId");
   const client = await trip.get("clientRef").get();
   const tripDate = trip.get("date").toDate();
-  const tripTime = tripDate.toLocaleTimeString("pt-PT",
-      {hour: "2-digit", minute: "2-digit"});
-
-  const title = "Tour Confirmado!";
-
-  const body = tourName +
-      "\nO Tour " + reservationId + " das " + tripTime + " está confirmado!";
+  const tripTime = convertFromUTC(tripDate);
 
   if (client.exists) {
+    await i18nReady;
+    const translations = getTranslations(client);
+
+    const title = translations("tourAccepted");
+
+    const body = translations("tourAcceptedWarning",
+        {tourName, reservationId, tripTime});
+
     const documentData = client.data();
     const hasField = "firebaseToken" in documentData;
     if (hasField) {
@@ -108,17 +144,19 @@ async function sendClientTripAcceptedWarning(trip, tour) {
 async function sendGuideTripCancelWarning(trip, tour) {
   const tourName = tour.get("name");
   const guide = await trip.get("guideRef").get();
+  const reservationId = trip.get("reservationId");
   const tripDate = trip.get("date").toDate();
-  const tripTime = tripDate.toLocaleTimeString("pt-PT",
-      {hour: "2-digit", minute: "2-digit"});
-
-  const title = "Tour cancelado!";
-
-  const body = tourName +
-      // eslint-disable-next-line max-len
-      "\nO Tour "+ await trip.get("reservationId") + " das " + tripTime + " foi cancelado!";
+  const tripTime = convertFromUTC(tripDate);
 
   if (guide.exists) {
+    await i18nReady;
+    const translations = getTranslations(guide);
+
+    const title = translations("tourCanceledTitle");
+
+    const body = translations("tourCanceledGuideWarning",
+        {tourName, reservationId, tripTime});
+
     const documentData = guide.data();
     const hasField = "firebaseToken" in documentData;
     if (hasField) {
@@ -133,19 +171,22 @@ async function sendGuideTripStartWarning(trip, tour) {
   const tourName = tour.get("name");
   const guide = await trip.get("guideRef").get();
   const tripDate = trip.get("date").toDate();
-  const tripTime = tripDate.toLocaleTimeString("pt-PT",
-      {hour: "2-digit", minute: "2-digit"});
-
-  const title = new Date().getTime() < tripDate.getTime() ?
-        "Próximo tour começa em breve!" :
-        "Tem um tour por iniciar!";
-
-  const body = tourName +
-        "\n" + (new Date().getTime() < tripDate.getTime() ?
-            "Prepare-se: você tem um tour às " + tripTime + "!" :
-            "Atenção: este tour já devia ter iniciado às " + tripTime + "!");
+  const tripTime = convertFromUTC(tripDate);
 
   if (guide.exists) {
+    await i18nReady;
+    const translations = getTranslations(guide);
+
+    const title = new Date().getTime() < tripDate.getTime() ?
+        translations("tourStartSoonGuideTitle") :
+        translations("tourStartTitle");
+
+    const body = new Date().getTime() < tripDate.getTime() ?
+              translations("tourStartSoonGuideWarning",
+                  {tourName, tripTime}) :
+              translations("tourStartGuideWarning",
+                  {tourName, tripTime});
+
     const documentData = guide.data();
     const hasField = "firebaseToken" in documentData;
     if (hasField) {
@@ -159,20 +200,22 @@ async function sendGuideTripStartWarning(trip, tour) {
 async function sendGuideTripEndWarning(trip, tour) {
   const tourName = tour.get("name");
   const tourDurationSlots= tour.get("durationSlots");
+  const reservationId = trip.get("reservationId");
   const guide = await trip.get("guideRef").get();
   const tripFinishDate = new Date(
       trip.get("date").toDate().getTime() +
     ((tourDurationSlots-1) * 60));
-
-  const tripTime = tripFinishDate.toLocaleTimeString("pt-PT",
-      {hour: "2-digit", minute: "2-digit"});
-
-  const title = "Tem um tour por finalizar!";
-
-  // eslint-disable-next-line max-len
-  const body = tourName + "\nAtenção: este tour já devia terminado às " + tripTime + "!";
+  const tripTime = convertFromUTC(tripFinishDate);
 
   if (guide.exists) {
+    await i18nReady;
+    const translations = getTranslations(guide);
+
+    const title = translations("tourFinished");
+
+    const body = translations("tourFinishedWarning",
+        {tourName, reservationId, tripTime});
+
     const documentData = guide.data();
     const hasField = "firebaseToken" in documentData;
     if (hasField) {

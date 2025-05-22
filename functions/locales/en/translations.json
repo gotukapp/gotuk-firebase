@@ -1,0 +1,19 @@
+{
+  "tourCanceledTitle": "Your tour has been canceled!",
+  "tourCanceledNoGuideClientWarning": "{{tourName}}\nWe're sorry, but we could't find a guide for your {{tripTime}} booking!",
+  "tourCanceledClientWarning": "{{tourName}}\nUnfortunately your booking {{reservationId}} for {{tripTime}} has been canceled. Please make a new reservation!",
+  "tourCanceledGuideWarning": "{{tourName}}\nTour {{reservationId}} of {{tripTime}} has been canceled!",
+  "tourStartSoonGuideTitle": "The next tour starts soon!",
+  "tourStartSoonTitle": "Your tour starts soon!",
+  "tourStartTitle": "There is a tour to start!",
+  "tourStartSoonClientWarning": "{{tourName}}\nDon't miss out: your tour starts at {{tripTime}}!",
+  "tourStartClientWarning": "{{tourName}}\nUrgent: Your tour was supposed to start at {{tripTime}}!",
+  "tourStartSoonGuideWarning": "{{tourName}}\nPrepara-te: tens um tour às {{tripTime}}!",
+  "tourStartGuideWarning": "{{tourName}}\nAtenção: este tour já devia ter iniciado às {{tripTime}}!",
+  "tourStarted": "Tour started!",
+  "tourStartedWarning": "{{tourName}}\nTour {{reservationId}} of {{tripTime}} has started!",
+  "tourAccepted": "Your tour is confirmed!",
+  "tourAcceptedWarning": "{{tourName}}\nTour {{reservationId}} of {{tripTime}} is confirmed. Get ready for an amazing experience!",
+  "tourFinished": "There is a tour to finish!",
+  "tourFinishedWarning": "{{tourName}}\nAttention: this tour {{reservationId}} should have ended at {tripTime}!"
+}
